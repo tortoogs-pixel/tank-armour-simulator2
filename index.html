@@ -84,6 +84,50 @@ label { font-size: 0.7em; color: #888; display: block; margin-bottom: 2px; text-
 const canvas = document.getElementById("sim");
 const ctx = canvas.getContext("2d");
 
+// --- AUDIO SYSTEM ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    if (type === 'fire') {
+        oscillator.type = 'triangle';
+        oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        oscillator.start(); oscillator.stop(audioCtx.currentTime + 0.3);
+    } else if (type === 'impact') {
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        oscillator.start(); oscillator.stop(audioCtx.currentTime + 0.1);
+    } else if (type === 'pen') {
+        const bufferSize = audioCtx.sampleRate * 0.2;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        noise.connect(noiseGain); noiseGain.connect(audioCtx.destination);
+        noise.start();
+    } else if (type === 'boom') {
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(60, audioCtx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 1);
+        gainNode.gain.setValueAtTime(0.8, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+        oscillator.start(); oscillator.stop(audioCtx.currentTime + 1.5);
+    }
+}
+
 const tankData = {
     m1a2: { ufp: { rha: 50, comp: 0, ang: 82 }, lfp: { rha: 150, comp: 400, ang: 30 }, turret: { rha: 400, comp: 600, ang: 15 }, side: { rha: 80, comp: 0, ang: 0 },
             crew: [{n:"Driver",x:500,y:350},{n:"Gunner",x:620,y:210},{n:"Commander",x:710,y:180}],
@@ -124,14 +168,14 @@ const tankData = {
 };
 
 const ammoStats = {
-    "m829a2": { pen: 780, type: "AP", vel: 22, tandem: false },
-    "dm53":   { pen: 650, type: "AP", vel: 24, tandem: false },
-    "3bm60":  { pen: 700, type: "AP", vel: 20, tandem: false },
-    "l27a1":  { pen: 720, type: "AP", vel: 21, tandem: false },
+    "m829a2": { pen: 780, type: "AP", vel: 22 },
+    "dm53":   { pen: 650, type: "AP", vel: 24 },
+    "3bm60":  { pen: 700, type: "AP", vel: 20 },
+    "l27a1":  { pen: 720, type: "AP", vel: 21 },
     "kornet_t": { pen: 1200, type: "ATGM", vel: 8, tandem: true },
-    "3bk18m": { pen: 550, type: "HEAT", vel: 14, tandem: false },
-    "m830a1": { pen: 480, type: "HEAT", vel: 15, tandem: false },
-    "hesh_183": { pen: 250, type: "HE", vel: 7, tandem: false }
+    "3bk18m": { pen: 550, type: "HEAT", vel: 14 },
+    "m830a1": { pen: 480, type: "HEAT", vel: 15 },
+    "hesh_183": { pen: 250, type: "HE", vel: 7 }
 };
 
 let projectile = null, spall = [], apsFlashes = [];
@@ -140,38 +184,15 @@ let follow = true, xray = true, eraEnabled = true, apsEnabled = true, shake = 0,
 let crewStates = [], moduleStates = [], eraBlocks = [];
 let explosionTriggered = false;
 
-document.getElementById("speedControl").oninput = (e) => {
-    userSpeed = parseFloat(e.target.value);
-    document.getElementById("speedDisplay").innerText = userSpeed + "x";
-};
-
-function toggleCam(){ 
-    follow = !follow; 
-    const btn = document.getElementById("btnCam");
-    btn.classList.toggle("active");
-    btn.innerText = follow ? "Cam: ON" : "Cam: OFF";
-}
+function toggleCam(){ follow=!follow; let b=document.getElementById("btnCam"); b.classList.toggle("active"); b.innerText=follow?"Cam: ON":"Cam: OFF"; }
 function toggleXray(){ xray=!xray; document.getElementById("btnXray").classList.toggle("active"); }
 function toggleERA(){ eraEnabled=!eraEnabled; document.getElementById("btnERA").classList.toggle("active"); applyPreset(); }
 function toggleAPS(){ apsEnabled=!apsEnabled; document.getElementById("btnAPS").classList.toggle("active"); }
 
-function updateLog() {
-    const log = document.getElementById("logContent");
-    log.innerHTML = "";
-    crewStates.forEach(c => {
-        const entry = document.createElement("div");
-        entry.className = "log-entry " + (c.alive ? "healthy" : "destroyed");
-        entry.innerText = `[CREW] ${c.n}`;
-        log.appendChild(entry);
-    });
-    moduleStates.forEach(m => {
-        const entry = document.createElement("div");
-        let status = (m.hp <= 0) ? "destroyed" : (m.hp < 100 ? "damaged" : "healthy");
-        entry.className = "log-entry " + status;
-        entry.innerText = `[MODL] ${m.t} (${Math.round(m.hp)}%)`;
-        log.appendChild(entry);
-    });
-}
+document.getElementById("speedControl").oninput = (e) => {
+    userSpeed = parseFloat(e.target.value);
+    document.getElementById("speedDisplay").innerText = userSpeed + "x";
+};
 
 function applyPreset() { 
     const tank = tankData[document.getElementById("tankPreset").value];
@@ -183,7 +204,9 @@ function applyPreset() {
 }
 
 function fire() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     applyPreset();
+    playSound('fire');
     const ammoId = document.getElementById("ammo").value;
     const stats = ammoStats[ammoId];
     const tank = tankData[document.getElementById("tankPreset").value];
@@ -192,9 +215,8 @@ function fire() {
     animSpeed = userSpeed; 
     projectile = {
         x: 0, y: 225, vx: stats.vel, active: true, 
-        pen: stats.pen, eff: 0, type: stats.type, tandem: stats.tandem,
-        w: stats.type === "ATGM" ? 50 : 35, eroded: false, eraContact: false, apsTriggered: false,
-        ammoId: ammoId
+        pen: stats.pen, eff: 0, type: stats.type, tandem: stats.tandem || false,
+        ammoId: ammoId, eroded: false, eraContact: false, apsTriggered: false
     };
 
     const angRad = zoneData.ang * Math.PI / 180;
@@ -202,69 +224,32 @@ function fire() {
     document.getElementById("status").innerText = `Shot Fired...`;
 }
 
+function drawRound(p) {
+    ctx.save(); ctx.translate(p.x, p.y);
+    if (p.eroded) {
+        ctx.fillStyle = "#ff9900"; ctx.fillRect(-10, -2, 10, 4);
+    } else {
+        if(p.type==="AP"){ ctx.fillStyle="#e0e0e0"; ctx.fillRect(-35,-1.5,35,3); }
+        else if(p.type==="ATGM"){ ctx.fillStyle="#2c3e50"; ctx.fillRect(-45,-4,45,8); }
+        else if(p.type==="HEAT"){ ctx.fillStyle="#7f8c8d"; ctx.fillRect(-30,-5,30,10); }
+        else if(p.ammoId==="hesh_183"){ ctx.fillStyle="#273c75"; ctx.fillRect(-40,-10,40,20); }
+    }
+    ctx.restore();
+}
+
 function createSpall(x, y, type) {
-    const count = (type === "HE" || type === "HESH") ? 250 : (type === "AP" ? 80 : 130);
+    const count = (type === "HE") ? 250 : (type === "AP" ? 80 : 130);
     for(let i=0; i<count; i++) {
         let spread = (type === "AP") ? 0.2 : 1.5;
-        let speedMult = (type === "HE" || type === "HESH") ? 3 : 6;
         spall.push({
             x: x, y: y, 
-            vx: (Math.random() * speedMult + 1.5), 
-            vy: (Math.random() - 0.5) * (speedMult * spread), 
+            vx: (Math.random() * 6 + 1.5), 
+            vy: (Math.random() - 0.5) * (6 * spread), 
             l: 2 + Math.random(), 
             c: (type === "HEAT" || type === "ATGM" || type === "HE") ? "#ffcc00" : "#ffffff",
             damage: type === "AP" ? 4 : 2
         });
     }
-}
-
-function drawRound(p) {
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    
-    if (p.eroded) {
-        ctx.fillStyle = "#ff9900";
-        ctx.fillRect(-10, -2, 10, 4);
-    } else {
-        switch(p.type) {
-            case "AP":
-                // APFSDS Needle
-                ctx.fillStyle = "#e0e0e0";
-                ctx.fillRect(-35, -1.5, 35, 3);
-                ctx.fillStyle = "#666";
-                ctx.fillRect(-5, -3, 2, 6); // Fin look
-                break;
-            case "ATGM":
-                // Missile body
-                ctx.fillStyle = "#2c3e50";
-                ctx.fillRect(-45, -4, 45, 8);
-                ctx.fillStyle = "#e74c3c";
-                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-10, -6); ctx.lineTo(-10, 6); ctx.fill(); // Nose
-                ctx.fillStyle = "#333";
-                ctx.fillRect(-45, -8, 5, 16); // Rear Fins
-                break;
-            case "HEAT":
-                // HEAT Shell
-                ctx.fillStyle = "#7f8c8d";
-                ctx.fillRect(-30, -5, 30, 10);
-                ctx.fillStyle = "#d35400";
-                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-12, -5); ctx.lineTo(-12, 5); ctx.fill(); // Tip
-                break;
-            case "HE":
-                if (p.ammoId === "hesh_183") {
-                    // Massive HESH
-                    ctx.fillStyle = "#273c75";
-                    ctx.fillRect(-40, -10, 40, 20);
-                    ctx.fillStyle = "#fbc531";
-                    ctx.arc(-5, 0, 10, 0, Math.PI*2); ctx.fill();
-                } else {
-                    ctx.fillStyle = "#444";
-                    ctx.fillRect(-25, -6, 25, 12);
-                }
-                break;
-        }
-    }
-    ctx.restore();
 }
 
 function update() {
@@ -274,9 +259,7 @@ function update() {
 
     if(follow && projectile && projectile.active) {
         ctx.translate(500, 225); ctx.scale(2.2, 2.2); ctx.translate(-projectile.x + 50, -225);
-    } else if (!follow) {
-        ctx.translate(50, 0);
-    }
+    } else if(!follow) ctx.translate(50, 0);
 
     if(shake > 0) { ctx.translate(Math.random()*shake-shake/2, Math.random()*shake-shake/2); shake *= 0.9; }
 
@@ -292,7 +275,6 @@ function update() {
     crewStates.forEach(c => {
         ctx.fillStyle = c.alive ? "#00d1b2" : "#ff3860";
         ctx.beginPath(); ctx.arc(c.x, c.y, 14, 0, Math.PI*2); ctx.fill();
-        if(xray) { ctx.fillStyle = "white"; ctx.font = "bold 10px Arial"; ctx.fillText(c.n, c.x - 20, c.y - 18); }
     });
 
     eraBlocks.forEach(e => { if(e.active) { ctx.strokeStyle = "#ffcc00"; ctx.strokeRect(e.x, e.y, e.w, e.h); } });
@@ -300,37 +282,20 @@ function update() {
     if(projectile && projectile.active) {
         projectile.x += projectile.vx * animSpeed;
         
-        const currentTank = tankData[document.getElementById("tankPreset").value];
-        if(apsEnabled && currentTank.hasAPS && !projectile.apsTriggered && projectile.x > 200 && projectile.x < 300) {
-            if(projectile.type !== "AP") {
-                projectile.apsTriggered = true; projectile.active = false;
-                apsFlashes.push({x: projectile.x + 40, y: projectile.y, r: 0, l: 1.0});
-                document.getElementById("status").innerText = "APS INTERCEPTED";
-            }
-        }
-
-        if(!projectile.eraContact) {
-            eraBlocks.forEach(e => {
-                if(e.active && projectile.x >= e.x && projectile.y >= e.y && projectile.y <= e.y + e.h) {
-                    if(!projectile.tandem) {
-                        e.active = false; projectile.eraContact = true;
-                        projectile.pen -= (projectile.type === "ATGM" || projectile.type === "HEAT" ? 600 : 250);
-                        document.getElementById("status").innerText = "ERA STOPPED MAIN CHARGE";
-                    } else {
-                        e.active = false; 
-                        document.getElementById("status").innerText = "TANDEM IGNORED ERA";
-                    }
-                }
-            });
+        const tank = tankData[document.getElementById("tankPreset").value];
+        if(apsEnabled && tank.hasAPS && !projectile.apsTriggered && projectile.x > 200 && projectile.x < 300 && projectile.type !== "AP") {
+            projectile.apsTriggered = true; projectile.active = false;
+            apsFlashes.push({x: projectile.x + 40, y: projectile.y, r: 0, l: 1.0});
+            playSound('impact');
         }
 
         if(!projectile.eroded && projectile.x >= 380) {
             if(projectile.pen > projectile.eff) {
                 projectile.eroded = true; projectile.vx *= 0.3; animSpeed = 0.02; shake = 15;
+                playSound('pen');
                 createSpall(405, projectile.y, projectile.type);
-                document.getElementById("status").innerText = "INTERNAL PENETRATION";
             } else {
-                projectile.active = false; document.getElementById("status").innerText = "REPELLED";
+                projectile.active = false; playSound('impact');
             }
         }
 
@@ -347,11 +312,10 @@ function update() {
     }
 
     spall.forEach(s => {
-        s.vx *= 0.98; s.vy *= 0.98;
         s.x += s.vx * (animSpeed * 110); s.y += s.vy * (animSpeed * 110);
         s.l -= 0.004; ctx.globalAlpha = Math.max(0, s.l); ctx.fillStyle = s.c; ctx.fillRect(s.x, s.y, 2, 2);
-        crewStates.forEach(c => { if(c.alive && Math.hypot(s.x-c.x, s.y-c.y) < 14) { c.alive = false; updateLog(); s.vx *= 0.4; } });
-        moduleStates.forEach(m => { if(s.x > m.x && s.x < m.x+m.w && s.y > m.y && s.y < m.y+m.h) { m.hp -= s.damage; updateLog(); checkExplosion(m); s.vx *= 0.6; } });
+        crewStates.forEach(c => { if(c.alive && Math.hypot(s.x-c.x, s.y-c.y) < 14) { c.alive = false; updateLog(); } });
+        moduleStates.forEach(m => { if(s.x > m.x && s.x < m.x+m.w && s.y > m.y && s.y < m.y+m.h) { m.hp -= s.damage; checkExplosion(m); updateLog(); } });
     });
     spall = spall.filter(s => s.l > 0);
 
@@ -369,9 +333,20 @@ function update() {
 
 function checkExplosion(m) {
     if(!explosionTriggered && m.hp <= 0 && (m.t.includes("Ammo") || m.t.includes("Auto") || m.t.includes("Stored"))) {
-        explosionTriggered = true; flash = 1.0; shake = 35;
-        document.getElementById("status").innerText = "CATASTROPHIC KILL";
+        explosionTriggered = true; flash = 1.0; shake = 35; playSound('boom');
     }
+}
+
+function updateLog() {
+    const log = document.getElementById("logContent"); log.innerHTML = "";
+    crewStates.forEach(c => {
+        const e = document.createElement("div"); e.className = "log-entry " + (c.alive?"healthy":"destroyed");
+        e.innerText = `[CREW] ${c.n}`; log.appendChild(e);
+    });
+    moduleStates.forEach(m => {
+        const e = document.createElement("div"); let s = m.hp<=0?"destroyed":(m.hp<100?"damaged":"healthy");
+        e.className = "log-entry "+s; e.innerText = `[MODL] ${m.t} (${Math.round(m.hp)}%)`; log.appendChild(e);
+    });
 }
 
 applyPreset();
