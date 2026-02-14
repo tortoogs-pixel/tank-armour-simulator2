@@ -68,6 +68,7 @@ label { font-size: 0.7em; color: #888; display: block; margin-bottom: 2px; text-
 </div>
 
 <br>
+<button id="btnCam" class="toggle-btn active" onclick="toggleCam()">Cam: ON</button>
 <button id="btnAPS" class="toggle-btn active" onclick="toggleAPS()">APS: ON</button>
 <button id="btnERA" class="toggle-btn active" onclick="toggleERA()">ERA: ON</button>
 <button id="btnXray" class="toggle-btn active" onclick="toggleXray()">X-Ray: ON</button>
@@ -144,6 +145,12 @@ document.getElementById("speedControl").oninput = (e) => {
     document.getElementById("speedDisplay").innerText = userSpeed + "x";
 };
 
+function toggleCam(){ 
+    follow = !follow; 
+    const btn = document.getElementById("btnCam");
+    btn.classList.toggle("active");
+    btn.innerText = follow ? "Cam: ON" : "Cam: OFF";
+}
 function toggleXray(){ xray=!xray; document.getElementById("btnXray").classList.toggle("active"); }
 function toggleERA(){ eraEnabled=!eraEnabled; document.getElementById("btnERA").classList.toggle("active"); applyPreset(); }
 function toggleAPS(){ apsEnabled=!apsEnabled; document.getElementById("btnAPS").classList.toggle("active"); }
@@ -215,9 +222,14 @@ function update() {
     ctx.clearRect(0,0,1000,450);
     ctx.save();
 
+    // The logic to follow the projectile or stay static
     if(follow && projectile && projectile.active) {
         ctx.translate(500, 225); ctx.scale(2.2, 2.2); ctx.translate(-projectile.x + 50, -225);
+    } else if (!follow) {
+        // If static, center the tank slightly
+        ctx.translate(50, 0);
     }
+
     if(shake > 0) { ctx.translate(Math.random()*shake-shake/2, Math.random()*shake-shake/2); shake *= 0.9; }
 
     ctx.fillStyle = "rgba(40,40,40,0.4)"; ctx.fillRect(400, 50, 580, 350);
