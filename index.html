@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>War Thunder Pro Simulator - Final Polish</title>
+<style>
+body{background:#0a0a0a;color:white;font-family: 'Segoe UI', Arial;text-align:center;margin:0;padding:20px;overflow-x:hidden}
+canvas{background:#111;border:2px solid #333;box-shadow: 0 0 40px rgba(0,0,0,0.9);margin-top:10px}
+.ui-panel{background: #1c1c1c; padding: 15px; border-radius: 8px; display: inline-block; margin-bottom: 10px; border: 1px solid #333}
+.controls{display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; align-items: center;}
+.control-group { background: #2a2a2a; padding: 10px; border-radius: 5px; border: 1px solid #444; text-align: left;}
+input,select{margin:4px;padding:6px; background: #000; color: #ffcc00; border: 1px solid #555; border-radius: 3px; font-weight: bold;}
+button{padding:10px 20px;background:#961d12;border:none;color:white;cursor:pointer; font-weight: bold; border-radius: 4px; text-transform: uppercase;}
+button:hover{background:#d12b1d}
+label { font-size: 0.7em; color: #888; display: block; margin-bottom: 2px; text-transform: uppercase;}
+.status{margin-top:15px;font-size: 1.5em; font-weight:bold; min-height: 1.5em; color: #aaa; text-transform: uppercase; letter-spacing: 2px;}
+.toggle-btn { background: #2980b9; margin: 0 5px; }
+.toggle-btn.active { background: #ffcc00; color: #000; }
+#damageLog { position: absolute; right: 40px; top: 250px; text-align: left; width: 220px; pointer-events: none; }
+.log-entry { font-size: 0.85em; margin: 2px 0; text-transform: uppercase; font-weight: bold; text-shadow: 1px 1px 2px black;}
+.destroyed { color: #ff3860; }
+</style>
+</head>
+<body>
+
+<div class="ui-panel">
+    <div class="controls">
+        <div class="control-group">
+            <label>Target</label>
+            <select id="tankPreset" onchange="applyPreset()">
+                <option value="m1a2">M1A2 SEPv2 (USA)</option>
+                <option value="t90m">T-90M (RUS)</option>
+                <option value="leo2a7">Leopard 2A7 (GER)</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Armor Zone</label>
+            <select id="armorZone" onchange="applyPreset()">
+                <option value="ufp">Upper Plate</option>
+                <option value="lfp">Lower Plate</option>
+                <option value="turret">Turret Cheek</option>
+                <option value="side">Side</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Distance (m)</label>
+            <input type="number" id="dist" value="500" step="100" min="0" max="3000" style="width: 70px;">
+        </div>
+        <div class="control-group">
+            <label>Shell Type</label>
+            <select id="ammo">
+                <option value="m829a2">M829A2 APFSDS</option>
+                <option value="3bm60">3BM60 APFSDS</option>
+                <option value="m830a1">M830A1 HEAT-FS</option>
+            </select>
+        </div>
+        <button onclick="fire()">Engage</button>
+    </div>
+</div>
+
+<br>
+<button id="btnXray" class="toggle-btn active" onclick="toggleXray()">X-Ray View</button>
+<button id="btnCam" class="toggle-btn active" onclick="toggleCam()">Shell Cam</button>
+<input type="range" id="speedControl" min="0.05" max="1" step="0.05" value="0.5">
+<span id="speedDisplay" style="color:#ffcc00">0.5x</span>
+
+<div id="damageLog"></div>
+
+<br>
+<canvas id="sim" width="1000" height="450"></canvas>
+<div class="status" id="status">Ready...</div>
+
+<script>
+const canvas = document.getElementById("sim");
+const ctx = canvas.getContext("2d");
+
+const tankData = {
+    m1a2: { ufp: { rha: 50, comp: 0, ang: 82 }, lfp: { rha: 150, comp: 400, ang: 30 }, turret: { rha: 400, comp: 600, ang: 15 }, 
+            crew: [{n:"Driver",x:500,y:350},{n:"Gunner",x:620,y:210},{n:"Commander",x:710,y:180},{n:"Loader",x:650,y:260}],
+            modules: [{x:850,y:280,w:100,h:80,t:"Engine"},{x:780,y:80,w:80,h:60,t:"Ammo Rack"}] },
+    t90m: { ufp: { rha: 200, comp: 600, ang: 68 }, lfp: { rha: 150, comp: 0, ang: 45 }, turret: { rha: 400, comp: 500, ang: 10 },
+            crew: [{n:"Driver",x:500,y:350},{n:"Gunner",x:620,y:210},{n:"Commander",x:620,y:140}],
+            modules: [{x:820,y:300,w:80,h:70,t:"Engine"},{x:610,y:280,w:80,h:40,t:"Autoloader"}] },
+    leo2a7: { ufp: { rha: 100, comp: 500, ang: 70 }, lfp: { rha: 100, comp: 400, ang: 35 }, turret: { rha: 450, comp: 700, ang: 20 },
+            crew: [{n:"Driver",x:520,y:340},{n:"Gunner",x:630,y:210},{n:"Commander",x:710,y:190},{n:"Loader",x:660,y:260}],
+            modules: [{x:860,y:290,w:90,h:80,t:"Engine"},{x:550,y:340,w:40,h:40,t:"Ammo Rack"}] }
+};
+
+const ammoStats = {
+    "m829a2": { pen: 780, drop: 0.04, type: "AP" },
+    "3bm60":  { pen: 700, drop: 0.06, type: "AP" },
+    "m830a1": { pen: 480, drop: 0.00, type: "HEAT" }
+};
+
+let projectile = null, spall = [], animSpeed = 0.5, userSpeed = 0.5;
+let follow = true, xray = true, shake = 0, flash = 0;
+let crewStates = [], moduleStates = [];
+let explosionTriggered = false; // Prevents multiple flashes
+
+document.getElementById("speedControl").oninput = (e) => {
+    userSpeed = parseFloat(e.target.value);
+    document.getElementById("speedDisplay").innerText = userSpeed + "x";
+};
+
+function toggleXray(){ xray=!xray; document.getElementById("btnXray").classList.toggle("active"); }
+function toggleCam(){ follow=!follow; document.getElementById("btnCam").classList.toggle("active"); }
+
+function updateLog() {
+    const log = document.getElementById("damageLog");
+    log.innerHTML = "";
+    moduleStates.forEach(m => {
+        if(m.hp < 100) {
+            const entry = document.createElement("div");
+            entry.className = "log-entry " + (m.hp <= 0 ? "destroyed" : "damaged");
+            entry.innerText = `${m.t}: ${m.hp <= 0 ? "DESTROYED" : "DAMAGED"}`;
+            log.appendChild(entry);
+        }
+    });
+    crewStates.forEach(c => {
+        if(!c.alive) {
+            const entry = document.createElement("div");
+            entry.className = "log-entry destroyed";
+            entry.innerText = `${c.n}: KNOCKED OUT`;
+            log.appendChild(entry);
+        }
+    });
+}
+
+function applyPreset() { 
+    const tank = tankData[document.getElementById("tankPreset").value];
+    crewStates = tank.crew.map(c => ({...c, alive: true}));
+    moduleStates = tank.modules.map(m => ({...m, hp: 100}));
+    projectile = null; spall = []; explosionTriggered = false; flash = 0;
+    document.getElementById("damageLog").innerHTML = "";
+    document.getElementById("status").innerText = "Ready...";
+}
+
+function fire() {
+    applyPreset();
+    const tank = tankData[document.getElementById("tankPreset").value];
+    const zone = tank[document.getElementById("armorZone").value];
+    const ammoId = document.getElementById("ammo").value;
+    const stats = ammoStats[ammoId];
+    const dist = parseFloat(document.getElementById("dist").value);
+    
+    const currentPen = stats.pen * (1 - (stats.drop * (dist / 1000)));
+    const angRad = zone.ang * Math.PI / 180;
+    const eff = (zone.rha + (zone.comp * 1.25)) / Math.cos(angRad);
+
+    animSpeed = userSpeed; 
+    projectile = {
+        x: 0, y: 225, vx: 22, active: true, 
+        pen: currentPen, eff: eff, type: stats.type,
+        w: 50, eroded: false
+    };
+    document.getElementById("status").innerText = `Firing (Pen: ${Math.round(currentPen)}mm)...`;
+}
+
+function update() {
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,1000,450);
+    ctx.save();
+
+    if(follow && projectile && projectile.active) {
+        ctx.translate(500, 225);
+        ctx.scale(2.5, 2.5);
+        ctx.translate(-projectile.x + 50, -225);
+    }
+    if(shake > 0) {
+        ctx.translate(Math.random()*shake-shake/2, Math.random()*shake-shake/2);
+        shake *= 0.9;
+    }
+
+    // Interior & Armor
+    ctx.fillStyle = xray ? "rgba(40,40,40,0.3)" : "#151515";
+    ctx.fillRect(420, 0, 580, 450);
+    ctx.fillStyle = "#3a3a3a";
+    ctx.fillRect(380, 50, 40, 350);
+
+    moduleStates.forEach(m => {
+        ctx.fillStyle = m.hp <= 0 ? "#ff0000" : (m.hp < 100 ? "#ffaa00" : "#444");
+        ctx.fillRect(m.x, m.y, m.w, m.h);
+        if(xray) {
+            ctx.fillStyle = "white"; ctx.font = "bold 9px Arial";
+            ctx.fillText(m.t, m.x + 2, m.y + 10);
+        }
+    });
+
+    crewStates.forEach(c => {
+        ctx.fillStyle = c.alive ? "#00d1b2" : "#ff3860";
+        ctx.beginPath(); ctx.arc(c.x, c.y, 14, 0, Math.PI*2); ctx.fill();
+        if(xray) {
+            ctx.fillStyle = c.alive ? "white" : "#ff3860";
+            ctx.fillText(c.n, c.x - 20, c.y - 18);
+        }
+    });
+
+    // Projectile Movement
+    if(projectile && projectile.active) {
+        projectile.x += projectile.vx * animSpeed;
+
+        if(!projectile.eroded && projectile.x >= 380) {
+            if(projectile.pen > projectile.eff) {
+                projectile.eroded = true;
+                projectile.w = 25; projectile.vx *= 0.6;
+                animSpeed = 0.02;
+                shake = 10;
+                for(let i=0; i<50; i++) {
+                    spall.push({
+                        x: 420, y: projectile.y, 
+                        vx: Math.random()*15+3, vy: (Math.random()-0.5)*12, 
+                        l: 1.0, c: projectile.type == "HEAT" ? "#ffcc00" : "#ffffff"
+                    });
+                }
+            } else {
+                projectile.active = false;
+                document.getElementById("status").innerText = "Non-Penetration";
+            }
+        }
+
+        if(animSpeed < userSpeed) animSpeed += 0.002;
+
+        ctx.fillStyle = projectile.eroded ? "#ff9900" : "#ffffff";
+        ctx.fillRect(projectile.x - projectile.w, projectile.y - 2, projectile.w, 4);
+        
+        crewStates.forEach(c => { if(c.alive && Math.hypot(projectile.x-c.x, projectile.y-c.y) < 15) { c.alive = false; updateLog(); } });
+        moduleStates.forEach(m => {
+            if(projectile.x > m.x && projectile.x < m.x+m.w && projectile.y > m.y && projectile.y < m.y+m.h) {
+                m.hp -= 20 * animSpeed;
+                checkExplosion(m);
+                updateLog();
+            }
+        });
+        if(projectile.x > 1000) projectile.active = false;
+    }
+
+    // Spall Update
+    spall.forEach(s => {
+        s.x += s.vx * animSpeed; s.y += s.vy * animSpeed; s.l -= 0.008 * animSpeed;
+        ctx.fillStyle = s.c; ctx.globalAlpha = s.l;
+        ctx.fillRect(s.x, s.y, 2, 2);
+        crewStates.forEach(c => { if(c.alive && Math.hypot(s.x-c.x, s.y-c.y) < 14) { c.alive = false; updateLog(); } });
+        moduleStates.forEach(m => {
+            if(s.x > m.x && s.x < m.x+m.w && s.y > m.y && s.y < m.y+m.h) {
+                m.hp -= 1.5; 
+                checkExplosion(m);
+                updateLog();
+            }
+        });
+    });
+    spall = spall.filter(s => s.l > 0);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    if(flash > 0) {
+        ctx.fillStyle = `rgba(255,120,0,${flash})`;
+        ctx.fillRect(0,0,1000,450);
+        flash -= 0.02 * animSpeed;
+    }
+
+    requestAnimationFrame(update);
+}
+
+function checkExplosion(m) {
+    if(!explosionTriggered && m.hp <= 0 && (m.t.includes("Ammo") || m.t.includes("Auto"))) {
+        explosionTriggered = true;
+        flash = 1.0; // TRIGGER SINGLE FLASH
+        shake = 30;
+        document.getElementById("status").innerText = "AMMO EXPLOSION";
+        document.getElementById("status").style.color = "#ff3860";
+    }
+}
+
+applyPreset();
+update();
+</script>
+</body>
+</html>
