@@ -193,7 +193,8 @@ function fire() {
     projectile = {
         x: 0, y: 225, vx: stats.vel, active: true, 
         pen: stats.pen, eff: 0, type: stats.type, tandem: stats.tandem,
-        w: stats.type === "ATGM" ? 50 : 35, eroded: false, eraContact: false, apsTriggered: false
+        w: stats.type === "ATGM" ? 50 : 35, eroded: false, eraContact: false, apsTriggered: false,
+        ammoId: ammoId
     };
 
     const angRad = zoneData.ang * Math.PI / 180;
@@ -217,16 +218,63 @@ function createSpall(x, y, type) {
     }
 }
 
+function drawRound(p) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    
+    if (p.eroded) {
+        ctx.fillStyle = "#ff9900";
+        ctx.fillRect(-10, -2, 10, 4);
+    } else {
+        switch(p.type) {
+            case "AP":
+                // APFSDS Needle
+                ctx.fillStyle = "#e0e0e0";
+                ctx.fillRect(-35, -1.5, 35, 3);
+                ctx.fillStyle = "#666";
+                ctx.fillRect(-5, -3, 2, 6); // Fin look
+                break;
+            case "ATGM":
+                // Missile body
+                ctx.fillStyle = "#2c3e50";
+                ctx.fillRect(-45, -4, 45, 8);
+                ctx.fillStyle = "#e74c3c";
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-10, -6); ctx.lineTo(-10, 6); ctx.fill(); // Nose
+                ctx.fillStyle = "#333";
+                ctx.fillRect(-45, -8, 5, 16); // Rear Fins
+                break;
+            case "HEAT":
+                // HEAT Shell
+                ctx.fillStyle = "#7f8c8d";
+                ctx.fillRect(-30, -5, 30, 10);
+                ctx.fillStyle = "#d35400";
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-12, -5); ctx.lineTo(-12, 5); ctx.fill(); // Tip
+                break;
+            case "HE":
+                if (p.ammoId === "hesh_183") {
+                    // Massive HESH
+                    ctx.fillStyle = "#273c75";
+                    ctx.fillRect(-40, -10, 40, 20);
+                    ctx.fillStyle = "#fbc531";
+                    ctx.arc(-5, 0, 10, 0, Math.PI*2); ctx.fill();
+                } else {
+                    ctx.fillStyle = "#444";
+                    ctx.fillRect(-25, -6, 25, 12);
+                }
+                break;
+        }
+    }
+    ctx.restore();
+}
+
 function update() {
     ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,1000,450);
     ctx.save();
 
-    // The logic to follow the projectile or stay static
     if(follow && projectile && projectile.active) {
         ctx.translate(500, 225); ctx.scale(2.2, 2.2); ctx.translate(-projectile.x + 50, -225);
     } else if (!follow) {
-        // If static, center the tank slightly
         ctx.translate(50, 0);
     }
 
@@ -287,9 +335,7 @@ function update() {
         }
 
         if(animSpeed < userSpeed) animSpeed += 0.002;
-        ctx.save(); ctx.translate(projectile.x, projectile.y);
-        ctx.fillStyle = projectile.eroded ? "#ff9900" : (projectile.type==="ATGM"?"#222":"#d1d1d1");
-        ctx.fillRect(-20, -2, 20, 4); ctx.restore();
+        drawRound(projectile);
         
         crewStates.forEach(c => { if(c.alive && Math.hypot(projectile.x-c.x, projectile.y-c.y) < 15) { c.alive = false; updateLog(); } });
         moduleStates.forEach(m => {
