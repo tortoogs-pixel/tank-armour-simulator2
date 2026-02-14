@@ -1,1 +1,1 @@
-# tank-armour-simulator2
+# Tank armor simulaor. Simple easy to use
