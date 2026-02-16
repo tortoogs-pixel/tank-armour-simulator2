@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Advanced MBT Physics Sandbox</title>
+<title>MBT Damage Physics Sandbox</title>
 <style>
 body{background:#0e0e0e;color:white;font-family:Arial;text-align:center}
 canvas{background:#1a1a1a;border:2px solid #555;margin-top:10px}
@@ -10,25 +10,20 @@ canvas{background:#1a1a1a;border:2px solid #555;margin-top:10px}
 select,input{margin:5px;padding:5px}
 button{padding:6px 14px;background:#4CAF50;border:none;color:white;cursor:pointer;margin:3px}
 .status{margin-top:10px;font-weight:bold}
-#videoContainer{margin-top:10px}
-video{width:500px;border:2px solid #555}
+video{width:450px;border:2px solid #555;margin-top:10px}
 </style>
 </head>
 <body>
 
-<h2>Advanced MBT Armor & Internal Damage Sandbox</h2>
+<h2>MBT Internal Damage & Spall Simulator</h2>
 
 <div class="controls">
-
 Tank:
 <select id="tankSelect"></select>
 
 Shell:
 <select id="shellSelect">
-<option value="M829A3">M829A3 (DU)</option>
-<option value="DM53">DM53</option>
-<option value="3BM60">3BM60</option>
-<option value="L27A1">L27A1</option>
+<option value="APFSDS">APFSDS</option>
 <option value="HEATFS">HEAT-FS</option>
 <option value="AP">AP</option>
 </select>
@@ -36,54 +31,26 @@ Shell:
 Distance (m)
 <input type="number" id="distance" value="1000">
 
-<br>
-
 <label><input type="checkbox" id="eraToggle"> ERA</label>
 <label><input type="checkbox" id="apsToggle"> APS</label>
 <label><input type="checkbox" id="cameraToggle"> Follow Cam</label>
+
 <button onclick="toggleLabels()">Toggle Labels</button>
 
 <br>
-
 Animation Speed
 <input type="range" id="speed" min="0.25" max="3" step="0.25" value="1">
 <span id="spd">1x</span>
 
 <button onclick="fire()">Fire</button>
-
 </div>
 
 <canvas id="sim" width="1200" height="550"></canvas>
-
-<div id="videoContainer">
-<h3>Round Footage</h3>
-<video id="roundVideo" controls></video>
-</div>
-
 <div class="status" id="status"></div>
 
 <script>
 const canvas=document.getElementById("sim");
 const ctx=canvas.getContext("2d");
-
-const video=document.getElementById("roundVideo");
-
-const videoSources={
-"M829A3":"videos/M829A3.mp4",
-"DM53":"videos/DM53.mp4",
-"3BM60":"videos/3BM60.mp4",
-"L27A1":"videos/L27A1.mp4",
-"HEATFS":"videos/HEATFS.mp4",
-"AP":"videos/AP.mp4"
-};
-
-shellSelect.onchange=function(){
-let selected=this.value;
-if(videoSources[selected]){
-video.src=videoSources[selected];
-video.load();
-}
-};
 
 let animationSpeed=1;
 speed.oninput=function(){
@@ -95,6 +62,10 @@ let showLabels=true;
 function toggleLabels(){showLabels=!showLabels;}
 
 let cameraOffset=0;
+let projectile=null;
+let fragments=[];
+let impactMarks=[];
+let result="";
 
 const tanks={
 "Abrams":{
@@ -108,8 +79,7 @@ crew:[
 ],
 modules:[
 {x:1050,y:400,w:100,h:80,type:"Engine",hp:200},
-{x:900,y:80,w:120,h:70,type:"Ammo Rack",hp:150},
-{x:820,y:320,w:140,h:25,type:"Bulkhead",hp:300}
+{x:900,y:80,w:120,h:70,type:"Ammo Rack",hp:150}
 ]
 }
 };
@@ -121,13 +91,18 @@ opt.text=t;
 tankSelect.add(opt);
 }
 
-let projectile=null;
-let result="";
+const shells={
+"APFSDS":{vel:1700,pen:850,type:"kinetic"},
+"HEATFS":{vel:900,pen:650,type:"heat"},
+"AP":{vel:900,pen:400,type:"kinetic"}
+};
 
 function resetTank(){
 let t=tanks[tankSelect.value];
 t.crew.forEach(c=>c.alive=true);
 t.modules.forEach(m=>m.hp=200);
+fragments=[];
+impactMarks=[];
 projectile=null;
 result="";
 cameraOffset=0;
@@ -135,13 +110,47 @@ cameraOffset=0;
 
 function fire(){
 resetTank();
-
 let tank=tanks[tankSelect.value];
-let shellType=shellSelect.value;
+let shell=shells[shellSelect.value];
+let dist=parseFloat(distance.value);
 
-video.play(); // 🔥 VIDEO NOW PLAYS WHEN FIRING
+let velocity=shell.vel*Math.exp(-dist/2000);
+let pen=shell.pen*(velocity/shell.vel);
 
-projectile={x:80,y:275,vx:18,type:shellType};
+if(apsToggle.checked && Math.random()<0.4){
+result="APS Intercepted!";
+return;
+}
+
+if(eraToggle.checked && shell.type==="heat"){
+pen*=0.6;
+}
+
+let armor=shell.type==="heat"?tank.armorCE:tank.armorKE;
+
+if(pen<armor){
+result="Non-Penetration";
+impactMarks.push({x:450,y:275,size:12});
+return;
+}
+
+projectile={x:80,y:275,vx:18,energy:pen-armor,type:shell.type};
+}
+
+function createSpallCone(energy){
+let angleSpread=40*Math.PI/180;
+for(let i=0;i<80;i++){
+let angle=(Math.random()-0.5)*angleSpread;
+let speed=Math.random()*10+5;
+fragments.push({
+x:490,
+y:275,
+vx:Math.cos(angle)*speed,
+vy:Math.sin(angle)*speed,
+energy:energy/80
+});
+}
+impactMarks.push({x:450,y:275,size:18});
 }
 
 function update(){
@@ -160,10 +169,17 @@ ctx.fillRect(450,150,40,300);
 ctx.fillStyle="#222";
 ctx.fillRect(490,0,710,550);
 
+impactMarks.forEach(m=>{
+ctx.fillStyle="black";
+ctx.beginPath();
+ctx.arc(m.x,m.y,m.size,0,Math.PI*2);
+ctx.fill();
+});
+
 let tank=tanks[tankSelect.value];
 
 tank.modules.forEach(m=>{
-ctx.fillStyle="#555";
+ctx.fillStyle=m.hp<=0?"red":"#555";
 ctx.fillRect(m.x,m.y,m.w,m.h);
 if(showLabels){
 ctx.fillStyle="white";
@@ -174,7 +190,7 @@ ctx.fillText(m.type,m.x,m.y-5);
 tank.crew.forEach(c=>{
 ctx.beginPath();
 ctx.arc(c.x,c.y,15,0,Math.PI*2);
-ctx.fillStyle="#00ffaa";
+ctx.fillStyle=c.alive?"#00ffaa":"red";
 ctx.fill();
 if(showLabels){
 ctx.fillStyle="white";
@@ -188,13 +204,33 @@ ctx.fillStyle="white";
 ctx.fillRect(projectile.x-15,projectile.y-2,30,4);
 
 if(projectile.x>=450){
-result="Impact!";
+createSpallCone(projectile.energy);
 projectile=null;
+result="Penetration!";
 }
 }
+
+fragments.forEach(f=>{
+f.x+=f.vx*animationSpeed;
+f.y+=f.vy*animationSpeed;
+
+ctx.fillStyle="orange";
+ctx.fillRect(f.x,f.y,3,3);
+
+tank.crew.forEach(c=>{
+if(c.alive && Math.hypot(f.x-c.x,f.y-c.y)<15){
+c.alive=false;
+}
+});
+
+tank.modules.forEach(m=>{
+if(f.x>m.x && f.x<m.x+m.w && f.y>m.y && f.y<m.y+m.h){
+m.hp-=f.energy*0.05;
+}
+});
+});
 
 ctx.restore();
-
 status.innerText=result;
 requestAnimationFrame(update);
 }
