@@ -2,48 +2,49 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Advanced Physics Armor Simulator</title>
+<title>Global MBT Physics Simulator</title>
 <style>
 body{background:#0e0e0e;color:white;font-family:Arial;text-align:center}
-canvas{background:#1b1b1b;border:2px solid #555;margin-top:10px}
+canvas{background:#1a1a1a;border:2px solid #555;margin-top:10px}
 .controls{margin:10px}
-input,select{margin:4px;padding:5px}
+select,input{margin:5px;padding:5px}
 button{padding:6px 14px;background:#4CAF50;border:none;color:white;cursor:pointer}
 .status{margin-top:10px;font-weight:bold}
 </style>
 </head>
 <body>
 
-<h2>Advanced Physics Armor Simulator</h2>
+<h2>Global MBT Armor & Internal Physics Simulator</h2>
 
 <div class="controls">
-RHA (mm)<input type="number" id="rha" value="120">
-Composite (mm)<input type="number" id="comp" value="80">
-Angle<input type="number" id="angle" value="60">
-Distance (m)<input type="number" id="dist" value="1000">
 
-Velocity Override<input type="number" id="velocityInput">
+Tank:
+<select id="tankSelect"></select>
 
-<br><br>
-
-Animation Speed
-<input type="range" id="speedControl" min="0.25" max="3" step="0.25" value="1">
-<span id="speedDisplay">1x</span>
-
-<br><br>
-
-Ammo
-<select id="ammo">
-<option value="APFSDS">APFSDS (DU)</option>
-<option value="APDS">APDS</option>
+Shell:
+<select id="shellSelect">
+<option value="M829A3">APFSDS (DU)</option>
+<option value="DM53">APFSDS (Tungsten)</option>
+<option value="3BM60">Russian APFSDS</option>
+<option value="L27A1">UK APFSDS</option>
+<option value="HEATFS">HEAT-FS</option>
 <option value="AP">AP</option>
-<option value="HEAT">HEAT-FS</option>
 </select>
 
+Distance (m)
+<input type="number" id="distance" value="1000">
+
+<br>
+
+Animation Speed
+<input type="range" id="speed" min="0.25" max="3" step="0.25" value="1">
+<span id="spd">1x</span>
+
 <button onclick="fire()">Fire</button>
+
 </div>
 
-<canvas id="sim" width="1100" height="500"></canvas>
+<canvas id="sim" width="1200" height="550"></canvas>
 <div class="status" id="status"></div>
 
 <script>
@@ -51,197 +52,194 @@ const canvas=document.getElementById("sim");
 const ctx=canvas.getContext("2d");
 
 let animationSpeed=1;
-document.getElementById("speedControl").oninput=function(){
+speed.oninput=function(){
 animationSpeed=parseFloat(this.value);
-document.getElementById("speedDisplay").innerText=this.value+"x";
+spd.innerText=this.value+"x";
 };
 
+const tanks={
+"Abrams":{
+armor:900,
+crew:[
+{x:850,y:200,alive:true}, // commander
+{x:900,y:250,alive:true}, // gunner
+{x:950,y:250,alive:true}, // loader
+{x:800,y:260,alive:true}  // driver
+],
+modules:[
+{x:1050,y:400,w:100,h:80,type:"Engine",hp:200},
+{x:900,y:80,w:120,h:70,type:"Ammo",hp:150},
+{x:820,y:320,w:140,h:25,type:"Bulkhead",hp:300}
+]
+},
+"Leopard 2A6":{
+armor:850,
+crew:[
+{x:850,y:200,alive:true},
+{x:900,y:250,alive:true},
+{x:950,y:250,alive:true},
+{x:800,y:260,alive:true}
+],
+modules:[
+{x:1050,y:400,w:100,h:80,type:"Engine",hp:200},
+{x:880,y:90,w:120,h:70,type:"Ammo",hp:150}
+]
+},
+"T-90A":{
+armor:750,
+crew:[
+{x:900,y:230,alive:true},
+{x:950,y:230,alive:true},
+{x:880,y:270,alive:true}
+],
+modules:[
+{x:1050,y:400,w:100,h:80,type:"Engine",hp:200},
+{x:900,y:300,w:100,h:50,type:"Carousel Ammo",hp:150}
+]
+},
+"Challenger 2":{
+armor:950,
+crew:[
+{x:850,y:200,alive:true},
+{x:900,y:250,alive:true},
+{x:950,y:250,alive:true},
+{x:800,y:260,alive:true}
+],
+modules:[
+{x:1050,y:400,w:100,h:80,type:"Engine",hp:200},
+{x:920,y:90,w:120,h:70,type:"Ammo",hp:150}
+]
+},
+"Leclerc":{
+armor:800,
+crew:[
+{x:900,y:230,alive:true},
+{x:950,y:230,alive:true},
+{x:850,y:260,alive:true}
+],
+modules:[
+{x:1050,y:400,w:100,h:80,type:"Engine",hp:200},
+{x:900,y:100,w:120,h:70,type:"Ammo",hp:150}
+]
+},
+"Type 99A":{
+armor:820,
+crew:[
+{x:900,y:230,alive:true},
+{x:950,y:230,alive:true},
+{x:880,y:270,alive:true}
+],
+modules:[
+{x:1050,y:400,w:100,h:80,type:"Engine",hp:200},
+{x:900,y:300,w:100,h:50,type:"Carousel Ammo",hp:150}
+]
+}
+};
+
+const shells={
+"M829A3":{vel:1700,pen:850,type:"kinetic"},
+"DM53":{vel:1650,pen:830,type:"kinetic"},
+"3BM60":{vel:1700,pen:820,type:"kinetic"},
+"L27A1":{vel:1550,pen:780,type:"kinetic"},
+"HEATFS":{vel:900,pen:650,type:"heat"},
+"AP":{vel:900,pen:400,type:"kinetic"}
+};
+
+for(let t in tanks){
+let opt=document.createElement("option");
+opt.value=t;
+opt.text=t;
+tankSelect.add(opt);
+}
+
 let projectile=null;
-let jet=null;
 let fragments=[];
-let resultText="";
-let ammoCookoff=false;
-let cookTimer=0;
+let jet=null;
+let result="";
 
-const crew=[
-{x:760,y:200,alive:true},
-{x:820,y:250,alive:true},
-{x:900,y:200,alive:true}
-];
-
-const modules=[
-{x:950,y:330,w:80,h:70,type:"Engine",hp:150},
-{x:880,y:80,w:80,h:60,type:"Ammo",hp:120},
-{x:700,y:280,w:120,h:25,type:"Bulkhead",hp:300}
-];
-
-function resetState(){
-crew.forEach(c=>c.alive=true);
-modules.forEach(m=>{
-if(m.type==="Bulkhead")m.hp=300;
-else if(m.type==="Engine")m.hp=150;
-else m.hp=120;
-});
+function resetTank(){
+let t=tanks[tankSelect.value];
+t.crew.forEach(c=>c.alive=true);
+t.modules.forEach(m=>m.hp=200);
 fragments=[];
 jet=null;
-ammoCookoff=false;
-cookTimer=0;
-resultText="";
-}
-
-function dragVelocity(v,distance,bc){
-return v*Math.exp(-distance/(bc*1000));
-}
-
-function kineticPen(mass,vel,diam,len,density){
-let ldr=len/diam;
-return 0.000005*Math.sqrt(mass)*Math.pow(vel,1.2)*ldr*density;
-}
-
-function ricochetCheck(angle,type,velocity){
-if(type==="HEAT" && angle>80)return true;
-if(type!=="HEAT" && angle>75){
-let chance=(angle-70)/20;
-if(Math.random()<chance)return true;
-}
-if(type==="AP" && velocity<600)return true;
-return false;
+result="";
 }
 
 function fire(){
-resetState();
+resetTank();
+let tank=tanks[tankSelect.value];
+let shell=shells[shellSelect.value];
+let dist=parseFloat(distance.value);
 
-let rha=parseFloat(rha.value);
-let comp=parseFloat(comp.value);
-let angle=parseFloat(document.getElementById("angle").value);
-let dist=parseFloat(document.getElementById("dist").value);
-let ammo=document.getElementById("ammo").value;
+let velocity=shell.vel*Math.exp(-dist/2000);
+let pen=shell.pen*(velocity/shell.vel);
 
-let velocity=0,mass=0,diam=0,len=0,density=1,type="kinetic",bc=0.9;
-
-if(ammo==="APFSDS"){velocity=1700;mass=4;diam=22;len=650;density=1.2;bc=1.1;}
-if(ammo==="APDS"){velocity=1450;mass=5;diam=30;len=350;density=1.0;}
-if(ammo==="AP"){velocity=900;mass=10;diam=90;len=150;density=0.9;}
-if(ammo==="HEAT"){type="chemical";velocity=900;}
-
-if(velocityInput.value!=="")velocity=parseFloat(velocityInput.value);
-else velocity=dragVelocity(velocity,dist,bc);
-
-if(ricochetCheck(angle,ammo,velocity)){
-resultText="Ricochet!";
+if(pen<tank.armor){
+result="Stopped by frontal armor";
 return;
 }
 
-let pen=0;
-
-if(type==="kinetic"){
-pen=kineticPen(mass,velocity,diam,len,density)*1000;
-}else{
-pen=550*(1-angle/120);
-}
-
-let effArmor=rha/Math.cos(angle*Math.PI/180);
-let compEff=(comp*1.5)/Math.cos(angle*Math.PI/180);
-
-if(pen<effArmor){
-resultText="Stopped by RHA";
-return;
-}
-
-pen-=effArmor;
-
-if(pen<compEff){
-resultText="Stopped by Composite";
-return;
-}
-
-pen-=compEff;
-
-projectile={
-x:60,
-y:250,
-vx:14,
-energy:pen,
-active:true,
-type:ammo
-};
-}
-
-function createJet(pen){
-jet={x:420,y:250,length:0,energy:pen};
-}
-
-function createSpall(pen){
-for(let i=0;i<60;i++){
-fragments.push({
-x:420,
-y:250,
-vx:(Math.random()*8+2),
-vy:(Math.random()-0.5)*8,
-energy:pen/60
-});
-}
+projectile={x:80,y:275,vx:18,energy:pen-tank.armor,type:shell.type};
 }
 
 function update(){
-ctx.clearRect(0,0,1100,500);
+ctx.clearRect(0,0,1200,550);
 
 ctx.fillStyle="#888";
-ctx.fillRect(400,100,40,300);
+ctx.fillRect(450,150,40,300);
 
 ctx.fillStyle="#222";
-ctx.fillRect(440,0,660,500);
+ctx.fillRect(490,0,710,550);
 
-modules.forEach(m=>{
+let tank=tanks[tankSelect.value];
+
+tank.modules.forEach(m=>{
 ctx.fillStyle=m.hp<=0?"red":"#555";
 ctx.fillRect(m.x,m.y,m.w,m.h);
 });
 
-crew.forEach(c=>{
+tank.crew.forEach(c=>{
 ctx.beginPath();
 ctx.arc(c.x,c.y,15,0,Math.PI*2);
-ctx.fillStyle=c.alive?"#00ffcc":"red";
+ctx.fillStyle=c.alive?"#00ffaa":"red";
 ctx.fill();
 });
 
-if(projectile && projectile.active){
+if(projectile){
 projectile.x+=projectile.vx*animationSpeed;
 ctx.fillStyle="white";
 ctx.fillRect(projectile.x-15,projectile.y-2,30,4);
 
-if(projectile.x>=400){
-projectile.active=false;
-if(projectile.type==="HEAT"){
-createJet(projectile.energy);
+if(projectile.x>=450){
+if(projectile.type==="heat"){
+jet={x:490,y:275,len:0,energy:projectile.energy};
 }else{
-createSpall(projectile.energy);
+for(let i=0;i<50;i++){
+fragments.push({
+x:490,y:275,
+vx:(Math.random()*8+2),
+vy:(Math.random()-0.5)*8
+});
 }
-resultText="Penetration!";
+}
+projectile=null;
+result="Penetration!";
 }
 }
 
 if(jet){
-jet.length+=20*animationSpeed;
-jet.energy-=5;
-
+jet.len+=20*animationSpeed;
 ctx.strokeStyle="orange";
 ctx.lineWidth=3;
 ctx.beginPath();
-ctx.moveTo(420,250);
-ctx.lineTo(420+jet.length,250);
+ctx.moveTo(490,275);
+ctx.lineTo(490+jet.len,275);
 ctx.stroke();
 
-modules.forEach(m=>{
-if(jet && 420+jet.length>m.x && jet.energy>0){
-m.hp-=jet.energy*0.1;
-if(m.type==="Ammo" && m.hp<=0 && !ammoCookoff){
-ammoCookoff=true;
-cookTimer=60;
-}
-}
+tank.modules.forEach(m=>{
+if(490+jet.len>m.x)m.hp-=5;
 });
-
-if(jet.energy<=0)jet=null;
 }
 
 fragments.forEach(f=>{
@@ -251,35 +249,12 @@ f.y+=f.vy*animationSpeed;
 ctx.fillStyle="orange";
 ctx.fillRect(f.x,f.y,3,3);
 
-crew.forEach(c=>{
+tank.crew.forEach(c=>{
 if(c.alive && Math.hypot(f.x-c.x,f.y-c.y)<15)c.alive=false;
 });
-
-modules.forEach(m=>{
-if(f.x>m.x && f.x<m.x+m.w && f.y>m.y && f.y<m.y+m.h){
-m.hp-=f.energy*0.05;
-if(m.type==="Ammo" && m.hp<=0 && !ammoCookoff){
-ammoCookoff=true;
-cookTimer=60;
-}
-}
-});
 });
 
-if(ammoCookoff){
-cookTimer-=1*animationSpeed;
-if(cookTimer<=0){
-ctx.fillStyle="yellow";
-ctx.beginPath();
-ctx.arc(900,200,120,0,Math.PI*2);
-ctx.fill();
-crew.forEach(c=>c.alive=false);
-resultText="Ammo Detonation!";
-ammoCookoff=false;
-}
-}
-
-document.getElementById("status").innerText=resultText;
+status.innerText=result;
 requestAnimationFrame(update);
 }
 
