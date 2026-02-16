@@ -1,4 +1,4 @@
-<!DOCTYPE html><!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -10,6 +10,8 @@ canvas{background:#1a1a1a;border:2px solid #555;margin-top:10px}
 select,input{margin:5px;padding:5px}
 button{padding:6px 14px;background:#4CAF50;border:none;color:white;cursor:pointer;margin:3px}
 .status{margin-top:10px;font-weight:bold}
+#videoContainer{margin-top:10px}
+video{width:500px;border:2px solid #555}
 </style>
 </head>
 <body>
@@ -36,9 +38,9 @@ Distance (m)
 
 <br>
 
-<label><input type="checkbox" id="eraToggle"> ERA Enabled</label>
-<label><input type="checkbox" id="apsToggle"> APS Enabled</label>
-<label><input type="checkbox" id="cameraToggle"> Follow Camera</label>
+<label><input type="checkbox" id="eraToggle"> ERA</label>
+<label><input type="checkbox" id="apsToggle"> APS</label>
+<label><input type="checkbox" id="cameraToggle"> Follow Cam</label>
 <button onclick="toggleLabels()">Toggle Labels</button>
 
 <br>
@@ -52,11 +54,36 @@ Animation Speed
 </div>
 
 <canvas id="sim" width="1200" height="550"></canvas>
+
+<div id="videoContainer">
+<h3>Round Footage</h3>
+<video id="roundVideo" controls></video>
+</div>
+
 <div class="status" id="status"></div>
 
 <script>
 const canvas=document.getElementById("sim");
 const ctx=canvas.getContext("2d");
+
+const video=document.getElementById("roundVideo");
+
+const videoSources={
+"M829A3":"videos/M829A3.mp4",
+"DM53":"videos/DM53.mp4",
+"3BM60":"videos/3BM60.mp4",
+"L27A1":"videos/L27A1.mp4",
+"HEATFS":"videos/HEATFS.mp4",
+"AP":"videos/AP.mp4"
+};
+
+shellSelect.onchange=function(){
+let selected=this.value;
+if(videoSources[selected]){
+video.src=videoSources[selected];
+video.load();
+}
+};
 
 let animationSpeed=1;
 speed.oninput=function(){
@@ -65,7 +92,7 @@ spd.innerText=this.value+"x";
 };
 
 let showLabels=true;
-function toggleLabels(){ showLabels=!showLabels; }
+function toggleLabels(){showLabels=!showLabels;}
 
 let cameraOffset=0;
 
@@ -84,29 +111,7 @@ modules:[
 {x:900,y:80,w:120,h:70,type:"Ammo Rack",hp:150},
 {x:820,y:320,w:140,h:25,type:"Bulkhead",hp:300}
 ]
-},
-"T-90A":{
-armorKE:750,
-armorCE:650,
-crew:[
-{x:900,y:230,name:"Commander",alive:true},
-{x:950,y:230,name:"Gunner",alive:true},
-{x:880,y:270,name:"Driver",alive:true}
-],
-modules:[
-{x:1050,y:400,w:100,h:80,type:"Engine",hp:200},
-{x:900,y:300,w:100,h:50,type:"Carousel Ammo",hp:150}
-]
 }
-};
-
-const shells={
-"M829A3":{vel:1700,pen:850,type:"kinetic"},
-"DM53":{vel:1650,pen:830,type:"kinetic"},
-"3BM60":{vel:1700,pen:820,type:"kinetic"},
-"L27A1":{vel:1550,pen:780,type:"kinetic"},
-"HEATFS":{vel:900,pen:650,type:"heat"},
-"AP":{vel:900,pen:400,type:"kinetic"}
 };
 
 for(let t in tanks){
@@ -117,57 +122,33 @@ tankSelect.add(opt);
 }
 
 let projectile=null;
-let fragments=[];
-let jet=null;
 let result="";
-let ammoExplosion=false;
 
 function resetTank(){
 let t=tanks[tankSelect.value];
 t.crew.forEach(c=>c.alive=true);
 t.modules.forEach(m=>m.hp=200);
-fragments=[];
-jet=null;
-ammoExplosion=false;
+projectile=null;
 result="";
 cameraOffset=0;
 }
 
 function fire(){
 resetTank();
+
 let tank=tanks[tankSelect.value];
-let shell=shells[shellSelect.value];
-let dist=parseFloat(distance.value);
+let shellType=shellSelect.value;
 
-let velocity=shell.vel*Math.exp(-dist/2000);
-let pen=shell.pen*(velocity/shell.vel);
+video.play(); // 🔥 VIDEO NOW PLAYS WHEN FIRING
 
-if(apsToggle.checked){
-if(Math.random()<0.5){
-result="APS Intercepted Projectile!";
-return;
-}
-}
-
-let armorValue = shell.type==="heat" ? tank.armorCE : tank.armorKE;
-
-if(eraToggle.checked && shell.type==="heat"){
-pen*=0.6;
-}
-
-if(pen<armorValue){
-result="Stopped by Armor";
-return;
-}
-
-projectile={x:80,y:275,vx:18,energy:pen-armorValue,type:shell.type};
+projectile={x:80,y:275,vx:18,type:shellType};
 }
 
 function update(){
 ctx.clearRect(0,0,1200,550);
 
 if(projectile && cameraToggle.checked){
-cameraOffset = projectile.x-200;
+cameraOffset=projectile.x-200;
 }
 
 ctx.save();
@@ -176,18 +157,13 @@ ctx.translate(-cameraOffset,0);
 ctx.fillStyle="#888";
 ctx.fillRect(450,150,40,300);
 
-if(eraToggle.checked){
-ctx.fillStyle="darkred";
-ctx.fillRect(430,200,20,80);
-}
-
 ctx.fillStyle="#222";
 ctx.fillRect(490,0,710,550);
 
 let tank=tanks[tankSelect.value];
 
 tank.modules.forEach(m=>{
-ctx.fillStyle=m.hp<=0?"red":"#555";
+ctx.fillStyle="#555";
 ctx.fillRect(m.x,m.y,m.w,m.h);
 if(showLabels){
 ctx.fillStyle="white";
@@ -198,7 +174,7 @@ ctx.fillText(m.type,m.x,m.y-5);
 tank.crew.forEach(c=>{
 ctx.beginPath();
 ctx.arc(c.x,c.y,15,0,Math.PI*2);
-ctx.fillStyle=c.alive?"#00ffaa":"red";
+ctx.fillStyle="#00ffaa";
 ctx.fill();
 if(showLabels){
 ctx.fillStyle="white";
@@ -212,60 +188,9 @@ ctx.fillStyle="white";
 ctx.fillRect(projectile.x-15,projectile.y-2,30,4);
 
 if(projectile.x>=450){
-if(projectile.type==="heat"){
-jet={x:490,y:275,len:0,energy:projectile.energy};
-}else{
-for(let i=0;i<60;i++){
-fragments.push({
-x:490,y:275,
-vx:(Math.random()*8+2),
-vy:(Math.random()-0.5)*8
-});
-}
-}
+result="Impact!";
 projectile=null;
-result="Penetration!";
 }
-}
-
-if(jet){
-jet.len+=20*animationSpeed;
-ctx.strokeStyle="orange";
-ctx.lineWidth=3;
-ctx.beginPath();
-ctx.moveTo(490,275);
-ctx.lineTo(490+jet.len,275);
-ctx.stroke();
-
-tank.modules.forEach(m=>{
-if(490+jet.len>m.x){
-m.hp-=5;
-if(m.type.includes("Ammo") && m.hp<=0){
-ammoExplosion=true;
-}
-}
-});
-}
-
-fragments.forEach(f=>{
-f.x+=f.vx*animationSpeed;
-f.y+=f.vy*animationSpeed;
-ctx.fillStyle="orange";
-ctx.fillRect(f.x,f.y,3,3);
-
-tank.crew.forEach(c=>{
-if(c.alive && Math.hypot(f.x-c.x,f.y-c.y)<15)c.alive=false;
-});
-});
-
-if(ammoExplosion){
-ctx.fillStyle="yellow";
-ctx.beginPath();
-ctx.arc(900,250,120,0,Math.PI*2);
-ctx.fill();
-tank.crew.forEach(c=>c.alive=false);
-result="Ammo Detonation!";
-ammoExplosion=false;
 }
 
 ctx.restore();
@@ -278,5 +203,3 @@ update();
 </script>
 </body>
 </html>
-
-
