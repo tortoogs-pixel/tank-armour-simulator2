@@ -2,359 +2,287 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>War Thunder Pro - Precision Ballistics</title>
+<title>Advanced Physics Armor Simulator</title>
 <style>
-body{background:#0a0a0a;color:white;font-family: 'Segoe UI', Arial;text-align:center;margin:0;padding:20px;overflow-x:hidden}
-canvas{background:#111;border:2px solid #333;box-shadow: 0 0 40px rgba(0,0,0,0.9);margin-top:10px;cursor: crosshair;}
-.ui-panel{background: #1c1c1c; padding: 15px; border-radius: 8px; display: inline-block; margin-bottom: 10px; border: 1px solid #333}
-.controls{display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; align-items: center;}
-.control-group { background: #2a2a2a; padding: 10px; border-radius: 5px; border: 1px solid #444; text-align: left;}
-input,select{margin:4px;padding:6px; background: #000; color: #ffcc00; border: 1px solid #555; border-radius: 3px; font-weight: bold;}
-button{padding:10px 20px;background:#961d12;border:none;color:white;cursor:pointer; font-weight: bold; border-radius: 4px; text-transform: uppercase;}
-button:hover{background:#d12b1d}
-label { font-size: 0.7em; color: #888; display: block; margin-bottom: 2px; text-transform: uppercase;}
-.status{margin-top:15px;font-size: 1.5em; font-weight:bold; min-height: 1.5em; color: #aaa; text-transform: uppercase; letter-spacing: 2px;}
-.toggle-btn { background: #2980b9; margin: 0 5px; padding: 8px 15px; border:none; color:white; border-radius:4px; cursor:pointer;}
-.toggle-btn.active { background: #ffcc00; color: #000; }
-#damageLog { position: absolute; right: 20px; top: 180px; text-align: left; width: 220px; pointer-events: none; background: rgba(0,0,0,0.6); padding: 10px; border-radius: 5px; border-left: 3px solid #ffcc00; }
-.log-entry { font-size: 0.8em; margin: 4px 0; text-transform: uppercase; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 2px; }
-.healthy { color: #00d1b2; }
-.damaged { color: #ffa500; }
-.destroyed { color: #ff3860; text-decoration: line-through; }
+body{background:#0e0e0e;color:white;font-family:Arial;text-align:center}
+canvas{background:#1b1b1b;border:2px solid #555;margin-top:10px}
+.controls{margin:10px}
+input,select{margin:4px;padding:5px}
+button{padding:6px 14px;background:#4CAF50;border:none;color:white;cursor:pointer}
+.status{margin-top:10px;font-weight:bold}
 </style>
 </head>
 <body>
 
-<div class="ui-panel">
-    <div class="controls">
-        <div class="control-group">
-            <label>Target Tank</label>
-            <select id="tankPreset" onchange="applyPreset()">
-                <option value="m1a2">USA - M1A2 SEPv3</option>
-                <option value="t90m">RUS - T-90M</option>
-                <option value="leo2a7">GER - Leopard 2A7</option>
-                <option value="chally2">UK - Challenger 2</option>
-                <option value="ztz99">CHN - ZTZ-99A</option>
-                <option value="merkava">ISR - Merkava Mk.4</option>
-            </select>
-        </div>
-        <div class="control-group">
-            <label>Armor Zone (Base thickness)</label>
-            <select id="armorZone" onchange="applyPreset()">
-                <option value="ufp">Upper Plate</option>
-                <option value="lfp">Lower Plate</option>
-                <option value="turret">Turret Cheek</option>
-                <option value="side">Hull Side</option>
-            </select>
-        </div>
-        <div class="control-group">
-            <label>Munition</label>
-            <select id="ammo">
-                <option value="m829a2">M829A2 APFSDS (KE)</option>
-                <option value="3bm60">3BM60 APFSDS (KE)</option>
-                <option value="l27a1">L27A1 CHARM 3 (KE)</option>
-                <option value="kornet_t">Kornet-D (Tandem ATGM)</option>
-                <option value="m830a1">M830A1 (HEAT-FS)</option>
-                <option value="hevt">HE-VT (Proxy/Frag)</option>
-            </select>
-        </div>
-        <p style="font-size: 0.7em; color: #888; margin-left: 10px;">CLICK CANVAS TO FIRE</p>
-    </div>
+<h2>Advanced Physics Armor Simulator</h2>
+
+<div class="controls">
+RHA (mm)<input type="number" id="rha" value="120">
+Composite (mm)<input type="number" id="comp" value="80">
+Angle<input type="number" id="angle" value="60">
+Distance (m)<input type="number" id="dist" value="1000">
+
+Velocity Override<input type="number" id="velocityInput">
+
+<br><br>
+
+Animation Speed
+<input type="range" id="speedControl" min="0.25" max="3" step="0.25" value="1">
+<span id="speedDisplay">1x</span>
+
+<br><br>
+
+Ammo
+<select id="ammo">
+<option value="APFSDS">APFSDS (DU)</option>
+<option value="APDS">APDS</option>
+<option value="AP">AP</option>
+<option value="HEAT">HEAT-FS</option>
+</select>
+
+<button onclick="fire()">Fire</button>
 </div>
 
-<br>
-<button id="btnCam" class="toggle-btn" onclick="toggleCam()">Cam: OFF</button>
-<button id="btnAPS" class="toggle-btn active" onclick="toggleAPS()">APS: ON</button>
-<button id="btnERA" class="toggle-btn active" onclick="toggleERA()">ERA: ON</button>
-<button id="btnXray" class="toggle-btn active" onclick="toggleXray()">X-Ray: ON</button>
-<input type="range" id="speedControl" min="0.05" max="1" step="0.05" value="0.5">
-<span id="speedDisplay" style="color:#ffcc00">0.5x</span>
-
-<div id="damageLog"><div id="logContent"></div></div>
-<br>
-<canvas id="sim" width="1000" height="450"></canvas>
-<div class="status" id="status">Target Acquired. Click to engage.</div>
+<canvas id="sim" width="1100" height="500"></canvas>
+<div class="status" id="status"></div>
 
 <script>
-const canvas = document.getElementById("sim");
-const ctx = canvas.getContext("2d");
+const canvas=document.getElementById("sim");
+const ctx=canvas.getContext("2d");
 
-let mouseX = 0, mouseY = 225;
-
-const tankData = {
-    m1a2: { ufp: { rha: 50, comp: 0, ang: 82 }, lfp: { rha: 150, comp: 400, ang: 30 }, turret: { rha: 400, comp: 600, ang: 15 }, side: { rha: 80, comp: 0, ang: 0 },
-            crew: [{n:"Driver",x:500,y:350},{n:"Gunner",x:620,y:210},{n:"Commander",x:710,y:180}],
-            modules: [{x:850,y:280,w:100,h:80,t:"Engine"},{x:780,y:80,w:80,h:60,t:"Ammo Rack"}],
-            era: [{x:370, y:150, w:12, h:150, active: true}], hasAPS: true },
-    t90m: { ufp: { rha: 200, comp: 600, ang: 68 }, lfp: { rha: 150, comp: 0, ang: 45 }, turret: { rha: 400, comp: 500, ang: 10 }, side: { rha: 100, comp: 50, ang: 0 },
-            crew: [{n:"Driver",x:500,y:350},{n:"Gunner",x:620,y:210},{n:"Commander",x:620,y:140}],
-            modules: [{x:820,y:300,w:80,h:70,t:"Engine"},{x:610,y:280,w:80,h:40,t:"Autoloader"}],
-            era: [{x:370, y:100, w:15, h:250, active: true}], hasAPS: true },
-    leo2a7: { ufp: { rha: 100, comp: 500, ang: 70 }, lfp: { rha: 100, comp: 400, ang: 35 }, turret: { rha: 450, comp: 700, ang: 20 }, side: { rha: 60, comp: 0, ang: 0 },
-            crew: [{n:"Driver",x:520,y:340},{n:"Gunner",x:630,y:210},{n:"Commander",x:710,y:190}],
-            modules: [{x:860,y:290,w:90,h:80,t:"Engine"},{x:550,y:340,w:40,h:40,t:"Ammo Rack"}],
-            era: [], hasAPS: false },
-    chally2: { ufp: { rha: 80, comp: 400, ang: 72 }, lfp: { rha: 100, comp: 350, ang: 40 }, turret: { rha: 500, comp: 800, ang: 5 }, side: { rha: 100, comp: 0, ang: 0 },
-            crew: [{n:"Driver",x:480,y:350},{n:"Gunner",x:640,y:220},{n:"Loader",x:680,y:220}],
-            modules: [{x:850,y:300,w:100,h:80,t:"Engine"},{x:600,y:380,w:60,h:40,t:"Stored Ammo"}],
-            era: [{x:370, y:300, w:20, h:100, active: true}], hasAPS: false },
-    ztz99: { ufp: { rha: 150, comp: 550, ang: 68 }, lfp: { rha: 100, comp: 0, ang: 45 }, turret: { rha: 350, comp: 600, ang: 10 }, side: { rha: 80, comp: 50, ang: 0 },
-            crew: [{n:"Driver",x:500,y:350},{n:"Gunner",x:610,y:210},{n:"Commander",x:610,y:140}],
-            modules: [{x:820,y:300,w:80,h:70,t:"Engine"},{x:605,y:290,w:70,h:30,t:"Autoloader"}],
-            era: [{x:370, y:50, w:18, h:350, active: true}], hasAPS: true },
-    merkava: { ufp: { rha: 100, comp: 400, ang: 75 }, lfp: { rha: 100, comp: 200, ang: 40 }, turret: { rha: 450, comp: 700, ang: 25 }, side: { rha: 100, comp: 0, ang: 0 },
-            crew: [{n:"Gunner",x:700,y:210},{n:"Commander",x:750,y:180},{n:"Loader",x:720,y:260}],
-            modules: [{x:450,y:280,w:120,h:90,t:"Frontal Engine"},{x:850,y:300,w:80,h:60,t:"Rear Ammo"}],
-            era: [], hasAPS: true }
+let animationSpeed=1;
+document.getElementById("speedControl").oninput=function(){
+animationSpeed=parseFloat(this.value);
+document.getElementById("speedDisplay").innerText=this.value+"x";
 };
 
-const ammoStats = {
-    "m829a2": { pen: 780, type: "AP", vel: 22 },
-    "3bm60":  { pen: 700, type: "AP", vel: 20 },
-    "l27a1":  { pen: 720, type: "AP", vel: 21 },
-    "kornet_t": { pen: 1200, type: "ATGM", vel: 8, tandem: true },
-    "m830a1": { pen: 480, type: "HEAT", vel: 15 },
-    "hevt": { pen: 50, type: "HE", vel: 12 }
+let projectile=null;
+let jet=null;
+let fragments=[];
+let resultText="";
+let ammoCookoff=false;
+let cookTimer=0;
+
+const crew=[
+{x:760,y:200,alive:true},
+{x:820,y:250,alive:true},
+{x:900,y:200,alive:true}
+];
+
+const modules=[
+{x:950,y:330,w:80,h:70,type:"Engine",hp:150},
+{x:880,y:80,w:80,h:60,type:"Ammo",hp:120},
+{x:700,y:280,w:120,h:25,type:"Bulkhead",hp:300}
+];
+
+function resetState(){
+crew.forEach(c=>c.alive=true);
+modules.forEach(m=>{
+if(m.type==="Bulkhead")m.hp=300;
+else if(m.type==="Engine")m.hp=150;
+else m.hp=120;
+});
+fragments=[];
+jet=null;
+ammoCookoff=false;
+cookTimer=0;
+resultText="";
+}
+
+function dragVelocity(v,distance,bc){
+return v*Math.exp(-distance/(bc*1000));
+}
+
+function kineticPen(mass,vel,diam,len,density){
+let ldr=len/diam;
+return 0.000005*Math.sqrt(mass)*Math.pow(vel,1.2)*ldr*density;
+}
+
+function ricochetCheck(angle,type,velocity){
+if(type==="HEAT" && angle>80)return true;
+if(type!=="HEAT" && angle>75){
+let chance=(angle-70)/20;
+if(Math.random()<chance)return true;
+}
+if(type==="AP" && velocity<600)return true;
+return false;
+}
+
+function fire(){
+resetState();
+
+let rha=parseFloat(rha.value);
+let comp=parseFloat(comp.value);
+let angle=parseFloat(document.getElementById("angle").value);
+let dist=parseFloat(document.getElementById("dist").value);
+let ammo=document.getElementById("ammo").value;
+
+let velocity=0,mass=0,diam=0,len=0,density=1,type="kinetic",bc=0.9;
+
+if(ammo==="APFSDS"){velocity=1700;mass=4;diam=22;len=650;density=1.2;bc=1.1;}
+if(ammo==="APDS"){velocity=1450;mass=5;diam=30;len=350;density=1.0;}
+if(ammo==="AP"){velocity=900;mass=10;diam=90;len=150;density=0.9;}
+if(ammo==="HEAT"){type="chemical";velocity=900;}
+
+if(velocityInput.value!=="")velocity=parseFloat(velocityInput.value);
+else velocity=dragVelocity(velocity,dist,bc);
+
+if(ricochetCheck(angle,ammo,velocity)){
+resultText="Ricochet!";
+return;
+}
+
+let pen=0;
+
+if(type==="kinetic"){
+pen=kineticPen(mass,velocity,diam,len,density)*1000;
+}else{
+pen=550*(1-angle/120);
+}
+
+let effArmor=rha/Math.cos(angle*Math.PI/180);
+let compEff=(comp*1.5)/Math.cos(angle*Math.PI/180);
+
+if(pen<effArmor){
+resultText="Stopped by RHA";
+return;
+}
+
+pen-=effArmor;
+
+if(pen<compEff){
+resultText="Stopped by Composite";
+return;
+}
+
+pen-=compEff;
+
+projectile={
+x:60,
+y:250,
+vx:14,
+energy:pen,
+active:true,
+type:ammo
 };
+}
 
-let projectile = null, spall = [], apsFlashes = [];
-let animSpeed = 0.5, userSpeed = 0.5;
-let follow = false, xray = true, eraEnabled = true, apsEnabled = true, shake = 0, flash = 0;
-let crewStates = [], moduleStates = [], eraBlocks = [];
-let explosionTriggered = false;
+function createJet(pen){
+jet={x:420,y:250,length:0,energy:pen};
+}
 
-// --- INPUT HANDLERS ---
-canvas.addEventListener('mousemove', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    mouseX = e.clientX - rect.left;
-    mouseY = e.clientY - rect.top;
+function createSpall(pen){
+for(let i=0;i<60;i++){
+fragments.push({
+x:420,
+y:250,
+vx:(Math.random()*8+2),
+vy:(Math.random()-0.5)*8,
+energy:pen/60
+});
+}
+}
+
+function update(){
+ctx.clearRect(0,0,1100,500);
+
+ctx.fillStyle="#888";
+ctx.fillRect(400,100,40,300);
+
+ctx.fillStyle="#222";
+ctx.fillRect(440,0,660,500);
+
+modules.forEach(m=>{
+ctx.fillStyle=m.hp<=0?"red":"#555";
+ctx.fillRect(m.x,m.y,m.w,m.h);
 });
 
-canvas.addEventListener('mousedown', (e) => {
-    fire(e);
+crew.forEach(c=>{
+ctx.beginPath();
+ctx.arc(c.x,c.y,15,0,Math.PI*2);
+ctx.fillStyle=c.alive?"#00ffcc":"red";
+ctx.fill();
 });
 
-function toggleCam(){ 
-    follow = !follow; 
-    const btn = document.getElementById("btnCam");
-    btn.classList.toggle("active");
-    btn.innerText = follow ? "Cam: ON" : "Cam: OFF";
-}
-function toggleXray(){ xray=!xray; document.getElementById("btnXray").classList.toggle("active"); }
-function toggleERA(){ eraEnabled=!eraEnabled; document.getElementById("btnERA").classList.toggle("active"); applyPreset(); }
-function toggleAPS(){ apsEnabled=!apsEnabled; document.getElementById("btnAPS").classList.toggle("active"); }
+if(projectile && projectile.active){
+projectile.x+=projectile.vx*animationSpeed;
+ctx.fillStyle="white";
+ctx.fillRect(projectile.x-15,projectile.y-2,30,4);
 
-function applyPreset() { 
-    const tank = tankData[document.getElementById("tankPreset").value];
-    crewStates = tank.crew.map(c => ({...c, alive: true}));
-    moduleStates = tank.modules.map(m => ({...m, hp: 100}));
-    eraBlocks = eraEnabled ? tank.era.map(e => ({...e})) : [];
-    projectile = null; spall = []; apsFlashes = []; explosionTriggered = false; flash = 0;
-    updateLog();
+if(projectile.x>=400){
+projectile.active=false;
+if(projectile.type==="HEAT"){
+createJet(projectile.energy);
+}else{
+createSpall(projectile.energy);
+}
+resultText="Penetration!";
+}
 }
 
-function fire(e) {
-    applyPreset();
-    const rect = canvas.getBoundingClientRect();
-    const targetY = e.clientY - rect.top;
-    
-    const ammoId = document.getElementById("ammo").value;
-    const stats = ammoStats[ammoId];
-    const tank = tankData[document.getElementById("tankPreset").value];
-    const zoneData = tank[document.getElementById("armorZone").value];
-    
-    animSpeed = userSpeed; 
-    projectile = {
-        x: 0, y: targetY, vx: stats.vel, active: true, 
-        pen: stats.pen, eff: 0, type: stats.type, tandem: stats.tandem || false,
-        w: stats.type === "ATGM" ? 50 : 35, eroded: false, eraContact: false, apsTriggered: false,
-        ammoId: ammoId
-    };
+if(jet){
+jet.length+=20*animationSpeed;
+jet.energy-=5;
 
-    const angRad = zoneData.ang * Math.PI / 180;
-    projectile.eff = (zoneData.rha + (zoneData.comp * 1.3)) / Math.cos(angRad);
-    document.getElementById("status").innerText = `Engaging Target at Alt: ${Math.round(targetY)}m`;
+ctx.strokeStyle="orange";
+ctx.lineWidth=3;
+ctx.beginPath();
+ctx.moveTo(420,250);
+ctx.lineTo(420+jet.length,250);
+ctx.stroke();
+
+modules.forEach(m=>{
+if(jet && 420+jet.length>m.x && jet.energy>0){
+m.hp-=jet.energy*0.1;
+if(m.type==="Ammo" && m.hp<=0 && !ammoCookoff){
+ammoCookoff=true;
+cookTimer=60;
+}
+}
+});
+
+if(jet.energy<=0)jet=null;
 }
 
-function drawRound(p) {
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    if (p.eroded) {
-        ctx.fillStyle = "#ff9900"; ctx.fillRect(-10, -2, 10, 4);
-    } else {
-        switch(p.type) {
-            case "AP":
-                ctx.fillStyle = "#e0e0e0"; ctx.fillRect(-35, -1.5, 35, 3);
-                ctx.fillStyle = "#666"; ctx.fillRect(-5, -3, 2, 6);
-                break;
-            case "ATGM":
-                ctx.fillStyle = "#2c3e50"; ctx.fillRect(-45, -4, 45, 8);
-                ctx.fillStyle = "#e74c3c"; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-10, -6); ctx.lineTo(-10, 6); ctx.fill();
-                break;
-            case "HEAT":
-                ctx.fillStyle = "#7f8c8d"; ctx.fillRect(-30, -5, 30, 10);
-                ctx.fillStyle = "#d35400"; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-12, -5); ctx.lineTo(-12, 5); ctx.fill();
-                break;
-            case "HE":
-                ctx.fillStyle = "#444"; ctx.fillRect(-25, -6, 25, 12);
-                break;
-        }
-    }
-    ctx.restore();
+fragments.forEach(f=>{
+f.x+=f.vx*animationSpeed;
+f.y+=f.vy*animationSpeed;
+
+ctx.fillStyle="orange";
+ctx.fillRect(f.x,f.y,3,3);
+
+crew.forEach(c=>{
+if(c.alive && Math.hypot(f.x-c.x,f.y-c.y)<15)c.alive=false;
+});
+
+modules.forEach(m=>{
+if(f.x>m.x && f.x<m.x+m.w && f.y>m.y && f.y<m.y+m.h){
+m.hp-=f.energy*0.05;
+if(m.type==="Ammo" && m.hp<=0 && !ammoCookoff){
+ammoCookoff=true;
+cookTimer=60;
+}
+}
+});
+});
+
+if(ammoCookoff){
+cookTimer-=1*animationSpeed;
+if(cookTimer<=0){
+ctx.fillStyle="yellow";
+ctx.beginPath();
+ctx.arc(900,200,120,0,Math.PI*2);
+ctx.fill();
+crew.forEach(c=>c.alive=false);
+resultText="Ammo Detonation!";
+ammoCookoff=false;
+}
 }
 
-function createSpall(x, y, type) {
-    const count = type === "HE" ? 250 : (type === "AP" ? 100 : 150);
-    for(let i=0; i<count; i++) {
-        let spread = type === "AP" ? 0.25 : 1.5;
-        let speedMult = type === "HE" ? 4 : 7;
-        spall.push({
-            x: x, y: y, 
-            vx: (Math.random() * speedMult + 2), 
-            vy: (Math.random() - 0.5) * (speedMult * spread), 
-            l: 2.5 + Math.random(), 
-            c: (type === "HEAT" || type === "ATGM" || type === "HE") ? "#ffcc00" : "#ffffff",
-            damage: type === "AP" ? 10 : 6 
-        });
-    }
+document.getElementById("status").innerText=resultText;
+requestAnimationFrame(update);
 }
 
-function update() {
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.clearRect(0,0,1000,450);
-    ctx.save();
-
-    // Crosshair logic
-    if(!projectile || !projectile.active) {
-        ctx.strokeStyle = "rgba(255, 0, 0, 0.3)";
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(0, mouseY); ctx.lineTo(1000, mouseY); ctx.stroke();
-        ctx.fillStyle = "#ffcc00";
-        ctx.font = "10px monospace";
-        ctx.fillText(`TARGET_Y: ${Math.round(mouseY)}`, 10, mouseY - 5);
-    }
-
-    if(follow && projectile && projectile.active) {
-        ctx.translate(500, 225); ctx.scale(2.2, 2.2); ctx.translate(-projectile.x + 50, -225);
-    } else if (!follow) {
-        ctx.translate(50, 0);
-    }
-
-    if(shake > 0) { ctx.translate(Math.random()*shake-shake/2, Math.random()*shake-shake/2); shake *= 0.9; }
-
-    // Armor representation
-    ctx.fillStyle = "rgba(40,40,40,0.4)"; ctx.fillRect(400, 50, 580, 350);
-    ctx.fillStyle = "#3a3a3a"; ctx.fillRect(380, 50, 25, 350);
-
-    moduleStates.forEach(m => {
-        ctx.fillStyle = m.hp <= 0 ? "rgba(255,0,0,0.6)" : (m.hp < 100 ? "rgba(255,170,0,0.6)" : "rgba(68,68,68,0.6)");
-        ctx.fillRect(m.x, m.y, m.w, m.h);
-        if(xray) { ctx.fillStyle = "white"; ctx.font = "bold 10px Arial"; ctx.fillText(m.t, m.x, m.y - 5); }
-    });
-
-    crewStates.forEach(c => {
-        ctx.fillStyle = c.alive ? "#00d1b2" : "#ff3860";
-        ctx.beginPath(); ctx.arc(c.x, c.y, 14, 0, Math.PI*2); ctx.fill();
-    });
-
-    eraBlocks.forEach(e => { if(e.active) { ctx.strokeStyle = "#ffcc00"; ctx.strokeRect(e.x, e.y, e.w, e.h); } });
-
-    if(projectile && projectile.active) {
-        projectile.x += projectile.vx * animSpeed;
-        
-        const currentTank = tankData[document.getElementById("tankPreset").value];
-        if(apsEnabled && currentTank.hasAPS && !projectile.apsTriggered && projectile.x > 200 && projectile.x < 300) {
-            if(projectile.type !== "AP") {
-                projectile.apsTriggered = true; projectile.active = false;
-                apsFlashes.push({x: projectile.x + 40, y: projectile.y, r: 0, l: 1.0});
-                document.getElementById("status").innerText = "APS INTERCEPTED";
-            }
-        }
-
-        if(!projectile.eraContact) {
-            eraBlocks.forEach(e => {
-                if(e.active && projectile.x >= e.x && projectile.y >= e.y && projectile.y <= e.y + e.h) {
-                    if(!projectile.tandem) {
-                        e.active = false; projectile.eraContact = true;
-                        projectile.pen -= (projectile.type === "ATGM" ? 600 : 250);
-                        document.getElementById("status").innerText = "ERA STOPPED MAIN CHARGE";
-                    } else {
-                        e.active = false;
-                        document.getElementById("status").innerText = "TANDEM IGNORED ERA";
-                    }
-                }
-            });
-        }
-
-        if(!projectile.eroded && projectile.x >= 380) {
-            if(projectile.pen > projectile.eff) {
-                projectile.eroded = true; projectile.vx *= 0.3; animSpeed = 0.02; shake = 15;
-                createSpall(405, projectile.y, projectile.type);
-                document.getElementById("status").innerText = "INTERNAL PENETRATION";
-            } else {
-                projectile.active = false; document.getElementById("status").innerText = "REPELLED";
-            }
-        }
-
-        if(animSpeed < userSpeed) animSpeed += 0.002;
-        drawRound(projectile);
-        
-        crewStates.forEach(c => { if(c.alive && Math.hypot(projectile.x-c.x, projectile.y-c.y) < 15) { c.alive = false; updateLog(); } });
-        moduleStates.forEach(m => {
-            if(projectile.x > m.x && projectile.x < m.x+m.w && projectile.y > m.y && projectile.y < m.y+m.h) {
-                m.hp -= 100 * animSpeed; // High direct damage
-                checkExplosion(m); updateLog();
-            }
-        });
-        if(projectile.x > 1000) projectile.active = false;
-    }
-
-    spall.forEach(s => {
-        s.x += s.vx * (animSpeed * 110); s.y += s.vy * (animSpeed * 110);
-        s.l -= 0.004; ctx.globalAlpha = Math.max(0, s.l); ctx.fillStyle = s.c; ctx.fillRect(s.x, s.y, 2, 2);
-        crewStates.forEach(c => { if(c.alive && Math.hypot(s.x-c.x, s.y-c.y) < 14) { c.alive = false; updateLog(); } });
-        moduleStates.forEach(m => { if(s.x > m.x && s.x < m.x+m.w && s.y > m.y && s.y < m.y+m.h) { m.hp -= s.damage; updateLog(); checkExplosion(m); } });
-    });
-    spall = spall.filter(s => s.l > 0);
-
-    apsFlashes.forEach(f => {
-        ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2);
-        ctx.fillStyle = `rgba(255,255,255,${f.l})`; ctx.fill();
-        f.r += 6; f.l -= 0.06;
-    });
-    apsFlashes = apsFlashes.filter(f => f.l > 0);
-
-    ctx.globalAlpha = 1; ctx.restore();
-    if(flash > 0) { ctx.fillStyle = `rgba(255,100,0,${flash})`; ctx.fillRect(0,0,1000,450); flash -= 0.02 * animSpeed; }
-    requestAnimationFrame(update);
-}
-
-function checkExplosion(m) {
-    if(!explosionTriggered && m.hp <= 0 && (m.t.includes("Ammo") || m.t.includes("Auto") || m.t.includes("Stored"))) {
-        explosionTriggered = true; flash = 1.0; shake = 35;
-        document.getElementById("status").innerText = "CATASTROPHIC KILL";
-    }
-}
-
-function updateLog() {
-    const log = document.getElementById("logContent");
-    log.innerHTML = "";
-    crewStates.forEach(c => {
-        const entry = document.createElement("div");
-        entry.className = "log-entry " + (c.alive ? "healthy" : "destroyed");
-        entry.innerText = `[CREW] ${c.n}`;
-        log.appendChild(entry);
-    });
-    moduleStates.forEach(m => {
-        const entry = document.createElement("div");
-        let status = (m.hp <= 0) ? "destroyed" : (m.hp < 100 ? "damaged" : "healthy");
-        entry.className = "log-entry " + status;
-        entry.innerText = `[MODL] ${m.t} (${Math.round(m.hp)}%)`;
-        log.appendChild(entry);
-    });
-}
-
-applyPreset();
 update();
 </script>
 </body>
